@@ -6,7 +6,7 @@ import { GameService } from '@/services/gameService'
 import { formatPoints, formatDate } from '@/lib/utils'
 import { Trophy, TrendingUp, Star, Play, Gift } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface UserStats {
@@ -25,6 +25,16 @@ interface RecentActivity {
   date: string
 }
 
+interface ParticipationWithGame {
+  id: string
+  points_earned: number
+  played_at: string
+  mini_games?: {
+    title: string
+    description?: string
+  }
+}
+
 export default function HomePage() {
   const { user, loading } = useAuth()
   const router = useRouter()
@@ -32,37 +42,26 @@ export default function HomePage() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [loadingStats, setLoadingStats] = useState(true)
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/auth')
-    }
-  }, [user, loading, router])
-
-  useEffect(() => {
-    if (user) {
-      loadUserData()
-    }
-  }, [user])
-
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
+    if (!user) return
+    
     try {
       const userService = new UserService()
       const gameService = new GameService()
       
-      const [stats, participations, purchases] = await Promise.all([
-        userService.getUserStats(user!.id),
-        gameService.getUserParticipations(user!.id),
-        new Promise(resolve => resolve([])) // Placeholder for purchases
+      const [stats, participations] = await Promise.all([
+        userService.getUserStats(user.id),
+        gameService.getUserParticipations(user.id),
       ])
 
       setUserStats(stats)
 
       // Combine recent activity
       const activity: RecentActivity[] = [
-        ...participations.slice(0, 3).map(p => ({
+        ...participations.slice(0, 3).map((p: ParticipationWithGame) => ({
           id: p.id,
           type: 'game' as const,
-          title: `Jeu: ${(p as any).mini_games?.title || 'Mini-jeu'}`,
+          title: `Jeu: ${p.mini_games?.title || 'Mini-jeu'}`,
           points: p.points_earned,
           date: p.played_at
         }))
@@ -74,7 +73,19 @@ export default function HomePage() {
     } finally {
       setLoadingStats(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/auth')
+    }
+  }, [user, loading, router])
+
+  useEffect(() => {
+    if (user) {
+      loadUserData()
+    }
+  }, [user, loadUserData])
 
   if (loading || !user) {
     return (

@@ -5,8 +5,8 @@ import { UserService } from '@/services/userService'
 import { RewardService } from '@/services/rewardService'
 import { GameService } from '@/services/gameService'
 import { formatPoints, formatDateTime, getInitials } from '@/lib/utils'
-import { User, Edit3, Trophy, Gift, Gamepad2, Calendar, Star } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Edit3, Trophy, Gift, Gamepad2, Star } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface UserStats {
@@ -17,15 +17,60 @@ interface UserStats {
   rank: number
 }
 
+interface RecentPurchase {
+  id: string
+  points_spent: number
+  redeemed_at: string
+  rewards?: {
+    title: string
+    description?: string
+    image_url?: string
+  }
+}
+
+interface RecentParticipation {
+  id: string
+  points_earned: number
+  played_at: string
+  mini_games?: {
+    title: string
+    description?: string
+  }
+}
+
 export default function ProfilePage() {
   const { user, loading, refreshUser } = useAuth()
   const router = useRouter()
   const [userStats, setUserStats] = useState<UserStats | null>(null)
-  const [recentPurchases, setRecentPurchases] = useState<any[]>([])
-  const [recentParticipations, setRecentParticipations] = useState<any[]>([])
+  const [recentPurchases, setRecentPurchases] = useState<RecentPurchase[]>([])
+  const [recentParticipations, setRecentParticipations] = useState<RecentParticipation[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [editingName, setEditingName] = useState(false)
   const [newName, setNewName] = useState('')
+
+  const loadUserData = useCallback(async () => {
+    if (!user) return
+    
+    try {
+      const userService = new UserService()
+      const rewardService = new RewardService()
+      const gameService = new GameService()
+      
+      const [stats, purchases, participations] = await Promise.all([
+        userService.getUserStats(user.id),
+        rewardService.getUserPurchases(user.id),
+        gameService.getUserParticipations(user.id)
+      ])
+
+      setUserStats(stats)
+      setRecentPurchases(purchases.slice(0, 5))
+      setRecentParticipations(participations.slice(0, 5))
+    } catch (error) {
+      console.error('Error loading user data:', error)
+    } finally {
+      setLoadingData(false)
+    }
+  }, [user])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -38,29 +83,7 @@ export default function ProfilePage() {
       setNewName(user.nom)
       loadUserData()
     }
-  }, [user])
-
-  const loadUserData = async () => {
-    try {
-      const userService = new UserService()
-      const rewardService = new RewardService()
-      const gameService = new GameService()
-      
-      const [stats, purchases, participations] = await Promise.all([
-        userService.getUserStats(user!.id),
-        rewardService.getUserPurchases(user!.id),
-        gameService.getUserParticipations(user!.id)
-      ])
-
-      setUserStats(stats)
-      setRecentPurchases(purchases.slice(0, 5))
-      setRecentParticipations(participations.slice(0, 5))
-    } catch (error) {
-      console.error('Error loading user data:', error)
-    } finally {
-      setLoadingData(false)
-    }
-  }
+  }, [user, loadUserData])
 
   const handleUpdateName = async () => {
     if (!user || !newName.trim()) return
@@ -202,7 +225,7 @@ export default function ProfilePage() {
                   <div key={participation.id} className="p-6 flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">
-                        {(participation as any).mini_games?.title || 'Mini-jeu'}
+                        {participation.mini_games?.title || 'Mini-jeu'}
                       </p>
                       <p className="text-sm text-gray-500">
                         {formatDateTime(participation.played_at)}
